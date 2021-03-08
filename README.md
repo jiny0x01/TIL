@@ -1,2 +1,1 @@
-# TIL
-Today I Learn
+# 김진영 사람 만들기 프로젝트
