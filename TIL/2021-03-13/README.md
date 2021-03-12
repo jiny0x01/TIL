@@ -115,3 +115,64 @@ KUBECONFIG는 크게 3가지 영역
 
 ## 명령어 치트시트
 https://kubernetes.io/docs/reference/kubectl/cheatsheet/
+
+## Pod
+
+### 가상환경 플랫폼 실행 단위
++ 가상머신 : instance
++ 도커 : container
++ 쿠버네티스 : Pod
+
+### Pod 특징
++ 1개 이상의 컨테이너 실행. 보통 1Pod 1컨테이너. 상황에 따라 2~3개. 3개 이상 넘어가는 경우 거의 없음.
++ Pod내에 실행되는 컨테이너는 동일 노드에 할당. 동일한 생명주기 가짐
++ 고유의 Pod IP. NAT 통신 없이 Pod 고유의 IP를 이용하여 접근
++ pod끼리 ip 공유. 서로 포트를 이용해서 구분함
++ volume 공유. 파일시스템 기반으로 파일 주고 받을 수 있음.
+
+> NAT(network access translation) : 여러 개의 내부 ip를 1개의 외부 ip로 연결하는 기술. 대표적으로 포트포워딩
+> 포트포워딩 : 게이트웨이(외부망)의 반대쪽에 위치한 보호/내부망에 상주하는 호스트에 대한 서비스를 생성하기 위해 흔히 사용되며, 통신하는 목적지 IP 주소와 포트 번호를 내부 호스트에 다시 매핑함으로써 이루어진다
+
+
+## YAML 파드 템플릿 생성
+--dry-run과 -o로 조합해서 파드 생성하지 않고 yaml 생성
+> kubectl run mynginx --image nginx --dry-run=client -o yaml > mynginx.yaml
+
+
+### pod 생성 순서
+1. kubectl로 Pod 정의를 쿠버네티스 마스터에 전달
+2. 쿠버네티스 마스터는 YAML 유효성체크하고 특정 노드에 컨테이너 실행하도록 명령내림
+3. 명령받은 노드(kubelet)는 컨테이너를 노드에 실행
+
+## nodeSelector
+라벨링으로 pod를 특정 node에 할당되도록 스케줄 가능
+A라는 node는 SSD쓰고 B라는 노드는 HDD쓰면, Pod를 SSD에 할당하려면 A에 할당해야함. 기본적으로 자동으로 할당되는데 nodeSelector로 할당시켜줌
+
+라벨 붙여놓은거 다 확인하기
+> kubectl get node --show-lables
+
+마스터 노드에 disktype=ssd 라벨 붙이고 워커노드에 disktype=hdd 붙이기
+
+> kubectl label node master disktype=ssd
+> kubectl label node worker disktype=hdd
+
+disktype 라벨확인
+> kubectl get node --show-labels | grep disktype
+
+Pod의 YAML에 nodeSelector property 추가
+```
+apiVersion: v1
+kind: Pod
+metadata:
+name: node-selector
+spec:
+   containers:
+   - name: nginx
+     image: nginx
+   nodeSelector:
+      disktype: ssd
+```
+
+> 만약 2개 이상의 노드에 동일한 라벨이 부여되는 경우, 쿠버네티스가 노드의 상태를 확인하여 최적의 노드 하나를 선택함.
+
+
