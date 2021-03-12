@@ -347,3 +347,70 @@ spec:
       # 나머지는 containers랑 같음
 ```
 메인 컨테이너 실행 전에 초기화를 위해 먼저 실행되는 컨테이너
+
+## ConfigMap
+메타데이터를 저장하는 리소스. 
+ConfigMap에 모든 설정값을 저장해놓고  Pod에서는 필요한 정보를 불러올 수 있음
+
+1. 생성하는 법
+> kubectl create configmap <key> <data-source>
+
+.properties 파일 작성하고 --from-file 옵션으로 ConfigMap만들기
+> kubectl create configmap <config_name> --form-file=<.properties>
+
+--from-literal로 값 바로 설정
+> kubectl create configmap special-config --from-literal=sepecial.power=10 --from-literal=special.strength=20
+
+2. YAML에다 직접 작성해도 된다.
+
+3. ConfigMap을 volume으로 마운트하여 파일처럼 사용 가능.
+여태까지 배운거에서는 hostPath(호스트에 저장), emptyDir(Pod간 디렉터리공유)이 끝이였는데 하나 추가된다.
+```
+# 생략
+spec:
+   # skip
+   volumes:
+   - name: game-volume
+     configMap:
+       name: game-config
+```
+ 
+ 4. 환경변수로 사용
+```
+ #skip
+ spec:
+     env:
+     - name: special_env
+       valueFrom:
+         configMapKeyRef:
+            name: special-config
+            key: special.power
+```
+ + name: 환경변수의 key 지정
+ + valueFrom: 기존의 value property 대신 valueFrom을 사용하여 다른 리소스의 정보를 참조하는 것을 선언
+    - configMapKeyRef: ConfigMap의 키를 참조
+      * name : ConfigMap의 이름 설정
+      * key : ConfigMap내에 포함된 설정값 중 특정 설정값을 명시적으로 선택
+
+5. 4에서는 1개의 설정값만 사용했다.(special.power) envFrom으로 모든 설정값을 사용해보자.
+```
+ #skip
+ spec:
+     containers:
+       envFrom:
+       - configMapRef:
+         name: monster-config
+```
+
+configMap을 5가지 방법으로 적용하는 방법에 대해 알아봤다.
+1. kubectl create configmap
+2. YAML에 직접 작성. kind를 ConfigMap으로 설정
+3. volume 마운트
+4. env 환경변수로 사용 - 1개
+5. envFrom 환경변수로 사용 - 여러개
+
+
+## Secret
+tmpfs라는 메모리 기반 파일시스템에 사용해서 보안에 강함
+base64로 인코딩(암호화는 아님! base64로 디코딩하면 바로 보임ㅋㅋ)
+
