@@ -402,15 +402,103 @@ spec:
          name: monster-config
 ```
 
-configMap을 5가지 방법으로 적용하는 방법에 대해 알아봤다.
+configMap을 2가지로 작성하고 3가지로 적용하는 방법에 대해 알아봤다.
+생성
 1. kubectl create configmap
 2. YAML에 직접 작성. kind를 ConfigMap으로 설정
-3. volume 마운트
-4. env 환경변수로 사용 - 1개
-5. envFrom 환경변수로 사용 - 여러개
+
+적용
+1. volume 마운트 -> 생성된 ConfigMap
+2. env 환경변수로 사용 - 1개
+3. envFrom 환경변수로 사용 - 여러개
 
 
 ## Secret
 tmpfs라는 메모리 기반 파일시스템에 사용해서 보안에 강함
 base64로 인코딩(암호화는 아님! base64로 디코딩하면 바로 보임ㅋㅋ)
 
+Secret 리소스 만들어보기
+```
+apiVersion: v1
+kind: Secret
+metadata:
+   name: user-info
+type: Opaque
+data:
+   username: YWRtaW4=            # admin
+   password: cGFzc3dvcmQxMjM=    # password123
+```
++ type: 기본 Opaque. 다른 타입도 있음
++ data: 저장할 민감데이터
+
+### stringData property. 인코딩을 쿠버네티스가 처리해주길 원할 때
+```
+apiVersion: v1
+kind: Secret
+metadata:
+   name: user-info
+type: Opaque
+stringData:
+   username: admin
+   password: password123
+```
+
+> kubectl apply -f user-info-stringdata.yaml
+
+> kubectl get secret user-info-stringdata -o yaml
+
+명령형 커맨드로 생성도 위의 configMap과 같다.
+```
+cat user-info.properties
+# username=admin
+# password=password123
+```
+
+--from env-file 옵션으로 properties 파일로부터 Secret을 생성
+> kubectl create secret generic user-info-from-file --from-env-file=user-info.properties
+
+> kubectl get secret user-info-from-file -o yaml
+--from-file, --from-literal 지원함.
+
+### 활용
+configMap과 마찬가지
+```
+# skip
+spec:
+   # skip
+   volumes:
+   -name: secret
+   secret:
+      secretNmae: user-info
+```
+
+환경변수는 
+```
+valueFrom:
+   secretKeyRef:
+       name: user-info
+       key: password
+```
+
+envFrom은
+```
+containers:
+    envFrom:
+    - secretRef:
+       name: user-info 
+```
+
+## Downward API
+Pod의 메타데이터를 컨테이너에게 전달할 수 있는 메커니즘
+실행되는 Pod의 정보를 컨테이너에 노출하고 싶을 때 사용
+```
+#SKIP
+volumes:
+  downwardAPI:          # DownwardAPI 볼륨 사용 선언
+   item:                # 메타데이터로 사용할 아이템 리스트 지정
+   - path: "lables"     # 볼륨과 연결될 컨테이너 내부 path
+     fieldRef:          # 참조할 필드
+      fieldPath: matadata.labels   #Pod의 메타데이터 필드
+ ```
+ 
+ env도 설정가능. 찾아보자
