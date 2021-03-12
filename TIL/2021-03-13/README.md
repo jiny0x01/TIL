@@ -23,8 +23,7 @@ describe는 get과 비슷하게 pod 상태 정보를 보여주면서 Pod에 대�
 
 
 ### 컨테이너 명령 전달
-> kubectl exec <NAME> -- <CMD>
-
+> kubectl exec <NAME> -- {CMD}
 
 ### 컨테이너 정보 수정
 > kubectl edit pod <NAME>
@@ -176,3 +175,175 @@ spec:
 > 만약 2개 이상의 노드에 동일한 라벨이 부여되는 경우, 쿠버네티스가 노드의 상태를 확인하여 최적의 노드 하나를 선택함.
 
 
+### 실행 명령 파라미터 지정
+```
+apiVersion: v1
+kind: Pod
+metadata:
+    name: cmd
+spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: nginx
+      image: nginx
+      command: ["/bin/echo"]
+      args: ["hello"]
+```
+
+command: 컨테이너의 시작 실행 명령. 도커의 entrypoint와 비슷
+args: 실행 명령에 전달할 파라미터. 도커의 cmd와 비슷
+restartPolicy : pod 재시작 정책 설정
+  - Always : Pod 종료시 항상 재시작(디폴트)
+  - Never: 재시작안함
+  - OnFailure: 실패시에만 재시작
+
+## 볼륨 연결
+Pod의 데이터는 휘발성임. 지속적으로 저장하려면 host volume에 저장해야함
+```
+apiVersion: v1
+kind: Pod
+metadata:
+    name: volume
+spec:
+    containers:
+    - name: nginx
+      image: nginx
+
+      volumeMounts:  
+      - mountPath: /container-volume
+        name: my-volume
+
+    volumes:
+    - name: my-volume
+      hostPath:
+          path: /home
+```
+
++ volumeMounts: 컨테이너 내부에 사용될 볼륨을 선언
+   - mountPath: 컨테이너 내부에 볼륨이 연결될 위치 지정
+   - name: volumeMounts와 volumes를 연결하는 식별자
+
+### Pod 끼리 파일을 주고 받는 emptyDir
+임시파일임
+```
+apiVersion: v1
+kind: Pod
+metadata:
+    name: volume
+spec:
+    containers:
+    - name: nginx
+      image: nginx
+
+      volumeMounts:  
+      - mountPath: /container-volume
+        name: my-volume
+
+    volumes:
+    - name: my-volume
+      emptyDir: {} # 2개 이상의 컨테이너가 서로 디렉터리 공간을 공유할 수 있음. 파일 접근이므로 레이스컨디션 조심
+```
+
+
+## 리소스 관리 requests랑 limits
+### request 컴퓨터 자원 최소 사용 보장
+```
+# 생략
+spec:
+    resources:
+        requests:
+            cpu: "250m"
+            memory: "500MI"
+```
+CPU에서 1000m은 1core.
+250m은 0.25core
+메모리 Mi는 1Mib(2^20 bytes) 
+
+### limit 컴퓨터 자원 최대 사용 보장
+```
+# 생략
+spec:
+    resources:
+        limits:
+            cpu: "500m"
+            memory: "1GI"
+```
+
+## livenessProbe
+컨테이너가 정상적으로 살아있는지 확인하기 위한 프로퍼티
+```
+# 생략
+spec:
+    containers:
+        livenessProbe:
+             httpGet:
+               path: /live
+               port: 80
+```
++ httpGet: HTTP GET method를 이용하여 상태 확인 수행. HTTP 상태코드가 200번~300번대면 정상, 그 이외는 비정상 -> 컨테이너 종료 및 재시작
+
+## readinessProbe
+Pod가 생성직후 트래픽을 받을 준비가 완료되었는지 확인하는 프로퍼티
+livenessProbe랑 똑같이 사용
+
+http method 말고 exec의 반환값으로 구분하는 법도 있다.
+
+```
+# 생략
+spec:
+    containers:
+        readinessProbe:
+             exec:
+               command:
+                 - cat
+                 - /tmp/ready
+```
+명령의 리턴값이 0이면 정상으로, 0 이외면 비정상으로 인식한다.
+위 예제에서는 /tmp/ready가 있으면 0으로 인식. 파일이 있는걸로 간주되면 트래픽을 받을 준비가 된 것
+
+## Pod 내에 2개의 컨테이너 실행
+```
+apiVersion: v1
+kind: Pod
+metadata:
+    name: second
+spec:
+    containers:
+    - name: nginx
+      image: nginx
+    - name: curl
+      image: curlimages/curl
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do sleep 5; curl localhost; done"]
+```
+컨테이너 안에 name으로 추가해주면 된다.
+
+### 2개 이상의 컨테이너 로그확인
+Pod내에 2개 이상의 컨테이너가 존재해서 어떤 컨테이너의 로그를 볼지 지정해야한다.
+> kubectl logs second -c nginx
+or
+> kubectl logs second -c curl
+
+두 번쨰 컨테이너에서 curl을 실행하기전에 **5초간 대기하는 이유는 쿠버네티스 Pod 내부 컨테이너끼리의 실행 순서를 보장하지 않는다. 따라서 nginx가 제대로 실행된 후 curl을 실행하기 위해서다.**
+
+sidecar 패턴
+Pod안에 2개이상의 컨테이너를 실행하는 이유는 메인 컨테이너가 본연의 임무를 수행하고, 서브 컨테이너가 메인 컨테이너를 보조하기 위함.
+
+e.g
++ 메인컨테이너 : 웹 서빙
++ 서브컨테이너 : 웹 로그 전송
+
+오토바이 사이드카 닮아서 지어진 이름
+
+### initContainers property 
+컨테이너 실행 순서는 보장되지 않음. 명시적으로 메인 컨테이너가 실행되기 전에 미리 초기화를 수행하기 위함
+```
+#생략
+spec:
+   containsers:
+      #생략
+   initContainers:
+   - name: git
+      # 나머지는 containers랑 같음
+```
+메인 컨테이너 실행 전에 초기화를 위해 먼저 실행되는 컨테이너
