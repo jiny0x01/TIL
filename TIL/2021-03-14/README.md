@@ -246,4 +246,88 @@ http01 solver를 이용한 도메인 인증을 성공하기 위해서는 반드�
 Let's encrypt 서버에서 도메인 주소에 대한 소유권을 확인함
 내부망에서 인증서를 발급하는 경우는 Let's encrypt에서 제공하는 DNS TXT record를 DNS 서버에 설정하며 됨
 
+### 스토리지 
+
+#### PersistentVolume
+Persistent : 영속성 (지속되는 성질)
+PersistentVolume(PV)는 데이터 저장소를 추상화한 리소스
+
+#### hostpath PV
+```
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-volume
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /tmp
+```
+
+PV 리소스는 네임스페이스에 국한되지 않는 클러스터 레벨의 리소스임
+> kubectl get pv
+위 명령어로 봤을 때 PV의 STATUS가 Available이면 볼륨만 생성되었고 데이터 저장소를 사용하고 있지 않다는 의미
+
+
+#### NFS PV
+NFS는 1984년 썬마이크로시스템 사에서 개발한 프로토콜로 TCP/IP네트워크 상에서 다른 컴퓨터의 파일 시스템을 마운트하고 공유하여 상대방의 파일 시스템 일부를 마치 자기 자신의 디렉터리인 것처럼 사용할 수 있게 해줍니다.
+
+더 다양한 종류는
+https://kubernetes.io/docs/concepts/storage/volumes
+
+### PersistentVolumeClaim(PVC)
+PersistentVolume의 사용을 요청하는 역할
+1. 클러스터 관리자가 PV생성
+2. PV 정의에 따라 볼륨이 생성됨
+3. 일반 사용자(개발자)가 PV를 선점하기 위해 요청(PVC 생성)
+4. PV와 연결되어 볼륨 사용
+
+```
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+PVC 리소스 생성하면 요청한 저장소 타입클래스 이름(storageClassName)에 맞는 PV를 연결해줌
+PV yaml에서 sotrageClassName을 manual로 작성했었음.
+
+이제 Pod를 올리고 Pod에서 직접 사용해보자
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: use-pvc
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - mountPath: /test-volume
+      name: vol
+  volumes:
+  - name: vol
+    persistentVolumeClaim:
+      claimName: my-pvc
+```
+
+> kubectl exec use-pvc -- sh -c 'echo "hello" > /test-volume/hello.txt'
+
+PVC에 데이터를 저장했다. Pod를 삭제하고 확인해보면 데이터가 남아있다.
+PCV는 사용자가 명시적으로 삭제하기 전까지 데이터 저장소가 유지된다.
+
+데이터를 저장하는 PV와 이를 활용하는 PVC의 생명주기가 다르다.
+PVC는 사용자의 요청에 의해 생성되고 삭제될 수 있지만 PV는 지속적으로 데이터가 유지되어야한다.
+PV도 Node와 마찬가지로 인프라적인 성격이 강하고 네임스페이스 안에 포함되지 않는다. (클러스터 레벨에 위치)
+PVC는 Pod와 같이 특정 네임스페이스 안에 존재한다.(네임스페이스 레벨에 위치)
 
