@@ -516,3 +516,95 @@ Service에서 Pod의 이름이나 IP로 직접 참조하면 Pod의 생명주기�
 
 라벨링 시스템을 통해 느슨한 관계를 유지할 경우  Service에서 바라보는 특정 라벨을 가지고 있는 어떠한 Pod에도 트래픽을 전달할 수 있다.
 Pod입장에서도 Service를 직접 참조할 필요 없이 라벨로 간접참조하면 된다.
+
+```
+# myservice.yaml
+apiVersion: v1
+kind: Service
+metadata:
+    labels:
+       hello: world
+    name: myservice
+spec:
+    ports:
+    - port: 8080
+    protocol: TCP
+    targetPort: 80
+    selector:
+        run: mynginx       # run=mynginx 라벨을 가진 Pod에 Service 트래픽 전달
+```
+
+Pod 하나를 생성하고 ip 주소를 확인
+> kubectl run mynginx --image nginx
+> kubectl get pod -o wide
+
+서비스를 생성하고 조회
+> kubectl apply -f myservice.yaml
+> kubectl get service #축약시 svc
+서비스IP주소확인
+
+curl 요청할 client pod 생성
+> kubectl run client --image nginx
+
+Pod IP로 접근
+> kubectl exec client -- curl 10.42.0.226
+
+서비스 IP로 접근
+> kubectl exec client -- curl 10.43.152.73:8080
+
+서비스 DNS로 접근
+> kubectl exec client -- curl myservice:8080
+
+이것으로 서비스를 end-point로 하여 pod에 접근하는 방법을 알아보았다.
+
+### Service 도메인 주소 법칙
+``<서비스 이름>.<네임스페이스>.svc.cluster.local``
+
+도메인 주소 생략
++ 서비스이름.네임스페이스 == 서비스이름.네임스페이스.svc.cluster.local
++ 서비스이름 == 서비스이름.네임스페이스.svc.cluster.local
+
+### 클러스터 DNS 서버
+Pod의 DNS 설정 확인
+> kubectl exec client -- cat /etc/resolv.conf
+
+네임서버 IP가 나오는데 쿠버네티스의 모든 Pod가 이 IP로 DNS 조회함.
+kube-system 네임스페이스의 Service 리소스를 조회하면 kube-dns라는 Service가 주인임
+> kubectl get svc -n kube-system
+> kubectl get svc kube-dns -n kube-system --show-labels
+
+kube-dns의 Label을 보면 k8s-app=kube-dns임. 해당 라벨로 Pod를 확인해보면
+> kubectl get pod -n kube-system -l k8s-app=kube-dns
+
+coredns-xxx 라는 Pod가 조회됨. 
+coredns는 쿠버네티스에서 제공하는 클러스터 DNS 서버. 이 친구 덕분에 쿠버네티스 클러스터 안에서 자체적인 도메인 네임 시스템을 갖게 됨.
+
+### Service 종류
+4가지
++ ClusterIP
+  - 클러스터 내부에서만 접근가능
+  - 외부에서 접근하지 못하는데 존재하는이유
+    * 네트워크 보안/관리를 위해. 1~2개의 외부 서비스 end-point 외에는 직접 트래픽을 받는 경우가 드뭄
+    * 더 확장된 쿠버네티스 네트워킹을 위한 기본 빌딩블럭으로 사용
++ NodePort
+  - 외부트래픽을 Serivce까지 전달
+  - 쿠버네티스에서 제공하는 NodePort range는 30000~32767까지
+  - NodePort는 Pod가 위치한 노드 뿐만 아니라 모든 노드에서 동일하게 서비스 end-point를 제공한다.
+    * 예를 들어, 생성한 node-port Pod가 마스터 노드에 위치한다고 가정, 마스터 노드, 워커 노드 모두 동일한 NodePort로 서비스 접근 가능
+  - 쿠버네티스는 클러스터 시스템이라 특정 노드에서만 서비스가 동작하지 않고 모든 노드에서 동일하게 적용. kube-proxy가 해줌
+    * kube-proxy는 리눅스 커널의 netfilter를 이용하여 커널 레벨에서 특정 트래픽을 중간에서 가로채 다른곳으로 라우팅 해주는 역할 수행
++ LoadBalancer
+  - NodePort만으로 외부 트래픽을 받을 수 있는데 LoadBalancer가 필요한 이유
+    1. 보안적 측면 : 호스트 서버의 노드포트 대역을 외부에 공개할 필요가 없음. 로드밸랜서만 외부 네트워크에 위치시키켜 호스트 정보를 숨김
+    2. 클러스터 앞단에 로드밸런서를 배치하면 각각의 서버 IP(master, worker)를 직접 알 필요가 없음. 
++ ExternalName
+  - 외부 DNS주소에 클러스터 내부에서 사용할 새로운 별칭을 만듬(내부에서 외부로 갈 떄)
+  - 쿠버네티스 클러스터에 편입되지 않는 외부 서비스에 쿠버네티스 네트워킹 기능을 연결하고 싶은 경우 사용
+
+### 네트워크 모델 특징
++ 각 Node간 NAT(network address translation)없이 통신 가능해야함
++ 각 Pod간 NAT 없이 통신 가능해야함
++ Node와 Pod간 NAT 없이 통신이 가능해야 함
++ 각 Pod는 고유의 IP 부여받음
++ 각 Pod IP는 네트워크 provider를 통해 할당받음
++ Pod IP는 클러스터 내부에서 어디서든 접근 가능해야함.
