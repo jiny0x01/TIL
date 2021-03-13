@@ -165,3 +165,20 @@ spec:
 ### CronJob
 Job을 주기적으로 실행할 수 있는 리소스
 
+### helm 쿠버네티스 패키지 매니저
+helm은 YAML 형식으로 구성되어 있으며 chart라고 한다.
+
+helm chart 구조
++ values.yaml
+  - 사용자가 원하는 값들을 설정하는 파일
++ templates/
+  - 설치할 리소스 파일이 존재하는 디렉터리. 쿠버네티스 리소스가 YAML 파일 형태로 있음.
+  - 각 설정값은 비워져 있고(placehold) values.yaml 설정값으로 채워짐
+
+chart 생성
+> helm create mychart
+
+### Ingress 리소스
+애플리케이션 계층에서 외부의 트래픽을 처리함
+부하 분산, TLS 종료, 도메인 기반 라우팅 기능 제공
+
