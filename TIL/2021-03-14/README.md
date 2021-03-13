@@ -2,6 +2,18 @@
 
 ## 오늘 공부한 컨셉
 
++ 컨트롤러 -> 컨트롤 루프 돌면서 리소스 관리함
++ ReplicaSet, Deployment 차이는 ReplicaSet은 복제만, Deployment는 복제에 + 배포관리
++ StatefulSet -> 각 파드를 식별해야할 때
++ DeamonSet -> 모든 노드에 동일한 pod 적용할떄
++ Job -> 한번 실행하고 끝나는 프로세스
++ Helm -> 쿠버네티스 패키지 관리자
++ Ingress -> OSI 7layer에서 애플리케이션 외부 트래픽 처리를 어떻게 할지 정하는 리소스
++ IngressController -> 받아온 트래픽은 Service에 전달해주는 역할
++ PersistentVolume, PersistentVolumeClaim -> Pod가 쓰는 볼륨 영구적으로 사용하게끔
++ StorageClass -> 동적으로 볼륨 생성
+
+
 ## 상세내용
 
 ### 컨트롤러
