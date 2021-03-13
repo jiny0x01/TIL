@@ -182,3 +182,68 @@ chart 생성
 애플리케이션 계층에서 외부의 트래픽을 처리함
 부하 분산, TLS 종료, 도메인 기반 라우팅 기능 제공
 
+#### ingress controller
+ingress 리소스 자체는 트래픽 처리에 대한 정보를 담고 있는 규칙에 가까움
+ingress 규칙을 읽고 외부의 트래픽을 Service로 전달해주는게 ingress controller
+
+#### 도메인 주소 테스트
+Layer 7계층 통신이라 도메인 주소 가지고 있어야 테스트할 수 있음.
+https://sslip.io를 사용하면 간단하게 도메인을 얻을 수 있음.
+
+#### 라우팅
++ 도메인 기반 라우팅
+  - IP 주소는 동일해도 도메인 주소를 기준으로 서로 다른 서비스로 HTTP 트래픽을 라우팅 할 수 있음
++ Path 기반 라우팅
+ 
+#### Basic Auth
+Ingress 리소스에 간단한 HTTP Authentication 기능을 추가할 수 있음
+Basic Auth는 유저ID, 비밀번호를 HTTP 헤더로 전달하여 인증함.
+헤더에 아래와 같이 user와 password를 콜론으로 묶어 base64로 인코딩하여 전달
+> Authorization: Basic $base64(user:password)
+
+접속
+> curl -v -H "Authorization: Basic $(echo -n foo:bar | base64)" https://httpbin.org/basic-auth/foo/bar
+
+ingress에 Basic Auth설정하기 위해 basic authenticatoin 파일이 필요함
+htpasswd라는 툴로 생성가능
+> sudo apt install -y apache2-utils
+> htpasswd -cb auth foo bar # id: foo, pw: bar
+> kubectl create secret generic basic-auth --from-file=auth  # 생성한  auth를 secret에 넣음
+> kubectl get secret basic-auth -oyaml # Secret 생성된 것 확인
+
+생성한 리소스를 Ingress에 설정해야함
+
+```
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth  # secret 이름 지정
+    nginx.ingress.kubernetes.io/auth-auth-realm: 'Authentication Required - foo' # 보안 메시지 및 인증 영역 설정
+  name: apache-auth
+spec:
+  rules:
+  - host: apache-auth.10.0.1.1.sslip.io
+    http:
+      paths:
+      - backend:
+          serviceName: apache
+          serviccePort: 80
+        path: /
+```
+
+### TLS 설정
+
+cert-manager로 인증서 발급 자동화
+https://cert-manager.io
+
+인증서 발급 도와줄 Issuer 리소스 생성
+https://letsencrypt.org 는 무료로 사용자들에게 정ㅇ식 인증서를 발급해주는 인증서 발급 기관
+
+http01 solver를 이용한 도메인 인증을 성공하기 위해서는 반드시 공인 IP를 사용해야함.
+Let's encrypt 서버에서 도메인 주소에 대한 소유권을 확인함
+내부망에서 인증서를 발급하는 경우는 Let's encrypt에서 제공하는 DNS TXT record를 DNS 서버에 설정하며 됨
+
+
