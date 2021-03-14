@@ -227,7 +227,7 @@ clean up
 
 > 참고로! 리퀘스트는 컨테이너가 생성될 때 필요한 자원량이고 리미트는 생성된 컨테이너가 가질 수 있는 최대 자원량이다.
 #### ResourceQuota
-limitrange가 개별 Pod 생성에 관여했다면 ResourceQuota는 전체 네임스페이스에 제약설정한다.
+limitrange가 개별 Pod 생성에 관여했다면 ResourceQuota는 전체 네임스페이스에 제약 설정한다.
 ```
 apiVersion: v1
 kind: ResourceQuota
@@ -240,3 +240,41 @@ spec:
     requests.cpu: 500m
     requests.memory: 700Mi
 ```
+clean up
+> kubectl delete resourcequota <resource-quota>
+
+### 노드관리
+온프레미스 환경에서 물리적인 디스크 손상, 내부 네트워크 장애가 있을 수 있다
+클라우드 서비스에선 서버 타입 변경, 디스크 교체등으로 노드를 일시적으로 중단하고 관리해야 하는 경우가 있다.
+쿠버네티스에서는 특정 노드를 유지보수 상태로 전환하여 새로운 Pod가 스케줄링 되지 않게 설정할 수 있다.
++ Cordon: 노드를 유지보수 모드로 전환
+  - cordon : 저지선을 치다, 사람들의 출입을 통제하다
+  - worker를 cordon
+    * > kubectl cordon worker
++ Uncordon: 유지보수가 완료된 노드를 정상화
+   - > kubectl uncordon worker
++ Drain: 노드를 유지보수 모드로 전환하며 기존의 Pod를 Evict한다.
+  - Evict: Pod를 내쫓는다는 의미
+  - > kubectl drain worker --ignore-daemonset
+  - deamonSet은 무시한다. 
+  - drain된 노드도 uncordon으로 되돌릴 수 있다.
++ PodDisruptionBudget(pdb)는 Drain시 모든 Pod가 한번에 죽기 때문에 서비스 부하가 한쪽에 몰려 응답 지연이 발생할 수 있는 것을 방지하기 위함
+  - pdb는 운영중인 Pod의 개수를 항상 일정 수준으로 유지할 수 있게해줌
+
+pdb yaml
+```
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: nginx-pdb
+spec:
+  minAvailable: 9             # 최소 유지해야하는 Pod수
+  selector:                   # 유지할 Pod
+    matchLabels:
+      app: nginx
+```
+
+  
+
+#### Cordon
+###
