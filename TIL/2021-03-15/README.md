@@ -183,3 +183,60 @@ spec:
 ```
 
 ### 클러스터 관리
+클러스터 관리자가 일반 사용자에게 컴퓨터 자원(리소스) 사용량을 제한하기 위해 사용하는 것이 LimitRange와 ResourceQuota다.
+
+#### LimitRange
+기능은 2가지가 있다.
+1. 일반 사용자가 리소스 사용량 정의를 생략해도 자동으로 Pod 리소스 사용량을 설정
+2. 관리자가 설정한 최대 요청량을 일반 사용자가 넘지 못하게 제한
+
+일반적으로 리소스 설정 없이 Pod를 생성하면 리소스 제약 없이 무제한으로 녿의 전체 리소스를 사용할 수 있다.
+> kubectl run mynginx --image nginx
+> kubectl get pod mynginx -oyaml | grep resources
+
+이 경우, 일반 사용자가 생성한 Pod가 노드 전체의 리소스를 고갈시킬 위험이 있다.
+이를 방지하기 위해 클러스터 관리자가 네임스페이스에 LimitRange를 설정한다.
+
+```
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: limit-range
+spec:
+  limits:
+  - default:
+      cpu: 400m
+      memory: 512Mi
+    defaultRequest:     # 생략시 사용되는 기본 request 설정값
+      cpu: 300m
+      memory: 256Mi
+    max:
+      cpu: 600m
+      memory: 600Mi
+    min:
+      memory: 200Mi
+    type: Container
+```
+
+위 yaml을 적용하고 리소스 설정없이 Pod를 생성하고 확인해보자
+> kubectl run nginx-lr --image nginx
+> kubectl get pod nginx-lr -oyaml | grep -A 6 resources
+
+clean up
+> kubectl delete limitrange <limit-range>
+
+> 참고로! 리퀘스트는 컨테이너가 생성될 때 필요한 자원량이고 리미트는 생성된 컨테이너가 가질 수 있는 최대 자원량이다.
+#### ResourceQuota
+limitrange가 개별 Pod 생성에 관여했다면 ResourceQuota는 전체 네임스페이스에 제약설정한다.
+```
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: res-quota
+spec:
+  hard:
+    limits.cpu: 700m
+    limits.memory: 800Mi
+    requests.cpu: 500m
+    requests.memory: 700Mi
+```
