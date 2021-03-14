@@ -276,5 +276,129 @@ spec:
 
   
 
-#### Cordon
-###
+### 접근제어
++ Authentication : 접속한 사람의 신분을 인증하는 단계(누가 접근하고 있는가?)
++ Authorization : 어떤 권한을 가지고 어떤 행동을 할 수 있는지 확인
++ Admission Control : 요청한 내용이 적절한지 확인함. LimitRange, ResourceQuota 기능이 Admission Control을 통해 Pod 요청이 적절한지 화깅ㄴ한 것
+
+#### 사용자 인증
+쿠버네티스에는 크게 5가지 사용자 인증 방식이 존재
+1. HTTP Authentication : HTTP 프로토콜에서 제공하는 인증체계를 이용한 인증
+2. X.509 Certificate: X.509 인증서를 이용한 상호 TLS(transport layer security) 인증
+3. OpenID Connection
+4. Webhook 인증 : Webhook 인증 서버를 통한 사용자 인증
+5. Proxy 인증 : Proxy 서버를 통한 대리 인증
+
+여기서는 많이 사용하는 2가지 HTTP Auth, X.509 cert에 대해서 다룸
+
+#### HTTP Basic Authentication
+KUBECONFIG파일은 쿠버네티스 마스터 API 서버와 통신하기 위해 필요한 정보를 담고 있는 파일임 $HOME/.kube/config에 위치
+
+```
+apiVersion: v1
+clusters:
+- cluster:
+    # 쿠버네티스 서버 인증서가 base64로 인코딩되어 있음
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkakNDQVIyZ0F3SUJBZ0lCQURBS0JnZ3Foa2pPUFFRREFqQWpNU0V3SHdZRFZRUUREQmhyTTNNdGMyVnkKZG1WeUxXTmhRREUyTVRVMU56WTJORE13SGhjTk1qRXdNekV5TVRreE56SXpXaGNOTXpFd016RXdNVGt4TnpJegpXakFqTVNFd0h3WURWUVFEREJock0zTXRjMlZ5ZG1WeUxXTmhRREUyTVRVMU56WTJORE13V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRL0pXQk0rTW4yTzk0bmRValJlZVY2M1VCSFRsRDhxYTRPZDN6clpCR1kKbERJY0Fzd2oyeDhvRUk0cjd6RFlGbnFCRVdNd1Z3bVRkVlRVbWZnb3pRS05vMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVXNaT3dVdWNFWklHS09Xa0NyZzJuCjFHVHFvcG93Q2dZSUtvWkl6ajBFQXdJRFJ3QXdSQUlnRzdURlRWZ1poT3pDWDRZQS9MNlZma1FpK1RERlo2QmYKbStFZFZheEdjK1FDSUVuZU5oa1B5blBCMlJETlNwN0xKTTIzR3dOVml6azdaWUJLMGsrQ001NGMKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    server: https://127.0.0.1:6443
+  name: default
+contexts:
+- context:
+    cluster: default
+    user: default
+  name: default
+current-context: default
+kind: Config
+preferences: {}
+users:
+- name: default
+  user:
+    password: 2ac6513b67e7a32e44975e5fa76bec7f
+    username: admin
+```
+
+/var/lib/rancher/k3s/server/cred/passwd
+위 파일에 myuser 사용자를 추가한다.
+> mypassword,user,uid,group1[,group2, group3]
+형식은 다음과 같다
+> password,user,uid,group1[,group2,group3]
+
+> system:masters group은 쿠 버네티스에서 따로 역할을 부여하지 않아도 모든 권한을 수행할 수 있는 마스터 그룹이다.
+
+passwd 파일을 저장하고 KUBECONFIG 파일의 user 정보를 password: mypassword, username: myuser로 수정한다.
+> sudo systemctl restart k3s
+
+이런식으로 API 서버도 basic auth로 사용자를 인증하며 passwd파일을 통해 계정을 관리한다.
+
+#### X.509 인증서
+
+CSR(Certificate Signing Request) : 인증서 서명 요청. 쿠버네티스가 보유한 CA로부터 인증서 서명을 받기 위해 요청하는 문서
+
+cloudflare에서 만든 cfssl 툴로 사용자 인증서 만들기
+> wget -q --show-progress --https-only --timestamping https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssl https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssljson
+> chmod +x cfssl cfssljson
+> sudo mv cfssl cfssljson /usr/local/bin
+
+인증서를 생성하는 방법
+1. CSR 파일 생성
+2. CA로부터 인증서 서명
+3. 발급된 인증서를 KUBECONFIG 파일에 설정
+
+CSR 파일을 생성하고 쿠버네티스 CA에 서명을 요청한다. k3s 쿠버네티스 CA는 다음 위치에 존재한다.
++ 인증서: /var/lib/rancher/k3s/server/tls/client-ca.crt
++ 개인키: /var/lib/rancher/k3s/server/tls/client-ca.key
+
+사용자 인증서를 발급하기 위한 CA config 파일을 생성하고 인증서를 발급하다.
+주의 깊게 봐야하는 문서는 다음과 같다.
++ 사용자 인증서: client-cert.pem
++ 사용자 개인키: client-cert-key.pem
+
+위 파일은 CSR을 통해 쿠버네티스 CA로부터 사용자 인증서와 사용자 개인키를 발급받은 것이다.
+해당 파일을 KKUBECONFIG 파일에 설정하면 X.509 인증 방식으로 변경된다.
+
+#### 역할 기반 접근제어(RBAC: Role Based Access Control)
+RBAC에는 크게 3가지 리소스가 있다.
++ Role(ClusterRole) : 어떤 권한을 소유하고 있는지 정의
++ Subjects: Role을 부여할 대상을 나타냄
++ RoleBinding(ClusterRoleBinding): Role과 Subject의 연결을 정의
+
+
+##### Role
+Role에는 2가지 리소스가 존재한다.
+1. 네임스페이스 안에서 역할을 정의하는 Role 리소스
+2. 네임스페이스 밖에서 클러스터 레벨로 역할을 정의하는 ClusterRole 리소스
+
+```
+# role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-viewer
+rules:
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs:      # 선택한 리소스에 대한 허용 동작 
+  - get
+  - watch
+  - list 
+```
+ClusterRole도 위와 유사. metadata에 따로 namespace를 입력하지 않으며 클러스터 레벨에서 역할을 정의할 수 있음
+
+##### subjects
+Subject는 Role을 부여받을 객체로 3가지가 있다. 쿠버네티스에는 User와 Group은 리소스가 명시적으로 구현되어 있지않고 개념만 있다.
+X.509 인증 방식에서는 인증서의 Common Name(CN) 부분이 쿠버네티스에서 User로 인식되고 Organization(O) 부분이 Group으로 인식된다.
+1. User
+2. Group
+3. ServiceAccount
+  + > kubectl get serviceaccount # or sa
+  + 네임스페이스 레벨에서 동작함. 모든 namespace를 생성할 떄는 default ServiceAccount가 자동으로 생성됨
+  + ServiceAccount는 Pod가 쿠버네티스와 통신할 때 사용하는 Identity다.
+  + 생성은 > kubectl create sa mysa
+ 
+#### RoleBinding, ClusterRoleBinding
+Role과 Subject를 묶는 역할 -> 특정 사용자가 부여받은 특정 권한을 사용할 수 있게 함.
+  
+
+
