@@ -6,7 +6,9 @@
   + 수평적확장(scale out), 수직적확장(scale up)
   + taint, toleration
   + affinity, antiaffinity
-
++ 접근제어
++ 인증서 basic auth, X.509
++ RBAC(roll based access control
 ## 상세내용
 
 ### 고급 스케줄링
@@ -507,3 +509,25 @@ spec:
     - podSelector: {}
 ```
  
+#### 특정 아이피대역 요청 차단
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: block-metadata
+  namespace: default
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - ipBlock:
+       cidr: 0.0.0.0/0
+       except:
+       - 169.254.169.254/32
+```
+특정 IP를 기준으로 아웃바운드를 막아야 하는 경우 유용하게 사용할 수 있음
+
+#### AND와 OR
+from property의 리스트 원소를 2개의 podSelector로 선언하면 AND로 작용한다.
+
+ingress property 아래의 각각의 from을 선언하면 OR로 표현된다.
