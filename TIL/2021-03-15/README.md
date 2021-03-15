@@ -9,6 +9,8 @@
 + 접근제어
 + 인증서 basic auth, X.509
 + RBAC(roll based access control
++ GitOps, Single source of truth
++ EFS 스택
 ## 상세내용
 
 ### 고급 스케줄링
