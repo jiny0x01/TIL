@@ -400,5 +400,110 @@ X.509 인증 방식에서는 인증서의 Common Name(CN) 부분이 쿠버네티
 #### RoleBinding, ClusterRoleBinding
 Role과 Subject를 묶는 역할 -> 특정 사용자가 부여받은 특정 권한을 사용할 수 있게 함.
   
+```
+apiVersion: rbac.authorizaation.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default 
+subjects:
+- kind: ServiceAccount
+  name: mysa
+roleRef:
+  kind: Role
+  name: pod-viewer
+  apiGroup: rbac.authorization.k8s.io
+```
+
+지금까지 한 작업은 다음과 같다.
+1. Pod의 get,watch,list 권한을 가진 pod-viewer Role 생성
+2. mysa라는 ServiceAccount 생성
+3. Role과 ServiceAccount를 연결하는 read-pods RoleBinding 생성
+
+#### 네트워크 접근 제어
+모든 네트워크 제공자가 네트워크 접근 제어 기능을 제원하지 않고 Weave, Calico 등 일부 제품만 지원함
+k3s는 flannel을 네트워크 제공자로 사용하고 있음. flannel에 Network Policy를 설정하기 위해 Canal 설치해야함
+> kubectl apply -f https://docs.projectcalico.org/manifests/canal.yaml
+
+쿠버네티스 네트워크 기본 정책
+1. 기본적으로 클러스터에 네트워크 정책이 하나도 설정되어 있지 않다.
+2. 하나도 설정된게 없으면 네임스페이스의 모든 트래픽이 열려 있다.(default-allow)
+3. 만약 한개의 네트워크 정책이라도 설정되면, 정책에 영향을 받는 Pod에 대해서 해당 네트워크 정책 이외의 나머지 트래픽은 모두 막힌다.(default-deny)
+
+#### NetworkPolicy 리소스
+네트워크를 제어하기 위해서 NetworkPolicy 리소스를 사용해야한다.
+네임스페이스 레벨에서 동작하며 라벨 셀렉터를 이용하여 특정 Pod에 네트워크 정책을 적용함
+
+네트워크를 구성해보자
+먼저 기본적으로 전체 인바운드 트래픽을 차단해서 외부 트래픽이 들어올 수 없게 **private zone**으로 만든다.
+```
+#deny-all.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: deny-all
+  namespace: default
+spec:
+  podSelector: {}  
+  ingress: []
+```
+ingress property에 빈 리스트가 선언되어 있음 -> 허용되는 인바운드 정책이 비어있다는 의미
+전체 인바운드 트래픽을 허용할 때는 ingress 리스트에 빈 딕셔너리 {}로 선언했었음. -> 특정 조건을 가지지 않는 모든 트래픽을 의미
+
+지금 전체 트래픽이 막혀있다.
+
+웹서버를 만들고 외부 사용자들이 접근할 수 있도록 Pod의 80번 포트만 허용해주자.
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: web-open
+  namespace: default
+spec:
+  podSelector:      # run=web인 Pod에 대해서 다음과 같은 정책을 허용
+    matchLabels:
+      run: web
+    ingress:
+    - from:
+      - podSelector: {}
+      ports:
+      - protocol: TCP
+        port: 80
+```
+
+이번에는 웹서버와 내부에서 통신할 앱서버를 만들어보자
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-from-web
+  namespace: default
+spec:
+  podSelector:      # run=web인 Pod에 대해서 다음과 같은 정책을 허용
+    matchLabels:
+      run: web
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+        run: web
+      
+```
+ingress에서 podSelector로 run=web 라벨을 가진 Pod에 대해서 허용하고 있다. 포트는 전체 다 허용
 
 
+#### Egress 아웃바운드 트래픽 제어
+사용자에게 개발용 네임스페이스를 제공하고 그 속에서만 서비스를 개발하고, 운영중인 다른 네임스페이스에는 접근을 차단하고 싶을 때, 특정 네임스페이스의 아웃바운드를 모두 막을 수 있다.
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: dont-leave-dev
+  namespace: dev
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+```
+ 
